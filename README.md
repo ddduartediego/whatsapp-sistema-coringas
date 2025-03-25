@@ -7,6 +7,7 @@ API para integração com WhatsApp usando a biblioteca whatsapp-web.js.
 - Geração de QR Code para conexão com WhatsApp
 - Verificação de status da conexão
 - Envio de mensagens
+- Desconexão do WhatsApp
 - Autenticação via token
 
 ## Endpoints
@@ -39,7 +40,21 @@ GET /whatsapp/status
 }
 ```
 
-### 3. Enviar Mensagem
+### 3. Desconectar WhatsApp
+```http
+POST /whatsapp/disconnect
+Authorization: Bearer seu-token-aqui
+```
+
+**Resposta:**
+```json
+{
+    "status": "success",
+    "message": "WhatsApp desconectado com sucesso"
+}
+```
+
+### 4. Enviar Mensagem
 ```http
 POST /send-message
 Authorization: Bearer seu-token-aqui
@@ -93,6 +108,11 @@ class WhatsAppConnectionManager {
     private qrCodeExpiration: number = 90000; // 1.5 minutos
     private pollTimer: NodeJS.Timeout | null = null;
     private qrCodeTimer: NodeJS.Timeout | null = null;
+    private apiToken: string;
+
+    constructor(apiToken: string) {
+        this.apiToken = apiToken;
+    }
 
     async getQRCode() {
         try {
@@ -109,6 +129,31 @@ class WhatsAppConnectionManager {
             return data;
         } catch (error) {
             console.error('Erro ao obter QR Code:', error);
+            throw error;
+        }
+    }
+
+    async disconnect() {
+        try {
+            const response = await fetch('https://sua-api.com/whatsapp/disconnect', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.apiToken}`
+                }
+            });
+
+            const data = await response.json();
+            
+            if (data.status === 'error') {
+                throw new Error(data.error);
+            }
+
+            this.stopPolling();
+            this.onDisconnected();
+            
+            return data;
+        } catch (error) {
+            console.error('Erro ao desconectar WhatsApp:', error);
             throw error;
         }
     }
@@ -177,6 +222,25 @@ class WhatsAppConnectionManager {
         // Implementar callback
     }
 }
+
+// Exemplo de uso:
+const whatsappManager = new WhatsAppConnectionManager('seu-token-aqui');
+
+// Conectar
+try {
+    const qrCode = await whatsappManager.getQRCode();
+    // Exibir QR Code na UI
+} catch (error) {
+    // Tratar erro
+}
+
+// Desconectar
+try {
+    await whatsappManager.disconnect();
+    // Atualizar UI para mostrar desconectado
+} catch (error) {
+    // Tratar erro
+}
 ```
 
 ## Status da Conexão
@@ -191,7 +255,7 @@ A API retorna os seguintes status:
 
 ## Segurança
 
-- Todas as requisições para enviar mensagens devem incluir um token de autenticação no header `Authorization: Bearer seu-token-aqui`
+- Todas as requisições para enviar mensagens e desconectar devem incluir um token de autenticação no header `Authorization: Bearer seu-token-aqui`
 - O token deve ser configurado na variável de ambiente `WHATSAPP_API_TOKEN`
 - O CORS está configurado para permitir apenas origens específicas
 
@@ -202,6 +266,7 @@ A API mantém logs detalhados de todas as operações, incluindo:
 - Erros de autenticação
 - Status da conexão
 - Erros ao enviar mensagens
+- Erros ao desconectar
 
 ## Suporte
 

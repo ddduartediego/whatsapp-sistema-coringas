@@ -230,6 +230,36 @@ app.post('/send-message', authenticateToken, async (req, res) => {
     }
 });
 
+// Rota para desconectar o WhatsApp
+app.post('/whatsapp/disconnect', authenticateToken, async (req, res) => {
+    try {
+        if (!client.info) {
+            return res.status(400).json({
+                status: 'error',
+                error: 'WhatsApp não está conectado'
+            });
+        }
+
+        // Desconecta o cliente
+        await client.destroy();
+        
+        // Limpa os dados do QR Code
+        qrCodeData = null;
+        qrCodeExpiration = null;
+
+        res.json({
+            status: 'success',
+            message: 'WhatsApp desconectado com sucesso'
+        });
+    } catch (error) {
+        console.error('Erro ao desconectar WhatsApp:', error);
+        res.status(500).json({
+            status: 'error',
+            error: 'Erro ao desconectar WhatsApp'
+        });
+    }
+});
+
 // Tratamento de erros global
 app.use((err, req, res, next) => {
     console.error('Erro não tratado:', err);
