@@ -270,4 +270,77 @@ A API mantém logs detalhados de todas as operações, incluindo:
 
 ## Suporte
 
-Para suporte ou dúvidas, entre em contato com a equipe de desenvolvimento. 
+Para suporte ou dúvidas, entre em contato com a equipe de desenvolvimento.
+
+# Documentação de Integração - WhatsApp Coringas API
+
+## Visão Geral
+Esta documentação descreve como integrar sua aplicação com a API de WhatsApp Coringas para gerenciar a conexão via QR Code.
+
+## Autenticação
+Todas as requisições que envolvem operações sensíveis (como desconexão) devem incluir um token de autenticação no header:
+```http
+Authorization: Bearer seu-token-aqui
+```
+
+## Fluxo de Conexão
+
+### 1. Obter QR Code
+```http
+GET https://whatsapp-coringas-api-production.up.railway.app/whatsapp/qrcode
+```
+
+**Resposta:**
+```json
+{
+    "status": "disconnected",
+    "qrcode": "string (base64)", // QR Code em formato base64
+    "expiresAt": "2024-03-21T10:00:00.000Z",
+    "lastUpdate": "2024-03-21T09:58:30.000Z"
+}
+```
+
+**Exemplo de Implementação:**
+```typescript
+async function getQRCode() {
+    try {
+        const response = await fetch('https://whatsapp-coringas-api-production.up.railway.app/whatsapp/qrcode');
+        const data = await response.json();
+        
+        if (data.status === 'error') {
+            throw new Error(data.error);
+        }
+
+        // O QR Code já vem em base64
+        const qrCodeBase64 = data.qrcode;
+        
+        return data;
+    } catch (error) {
+        console.error('Erro ao obter QR Code:', error);
+        throw error;
+    }
+}
+
+// Exemplo de como exibir o QR Code
+function QRCodeDisplay({ qrCode }: { qrCode: string }) {
+    return (
+        <div>
+            {/* Usando diretamente como src de imagem */}
+            <img 
+                src={`data:image/png;base64,${qrCode}`} 
+                alt="QR Code WhatsApp"
+            />
+            
+            {/* Ou usando uma biblioteca de QR Code */}
+            <QRCodeSVG 
+                value={qrCode}
+                size={256}
+                level="H"
+                includeMargin={true}
+            />
+        </div>
+    );
+}
+```
+
+// ... resto do arquivo continua igual ... 

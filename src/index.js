@@ -111,42 +111,69 @@ client.initialize().catch(err => {
     qrCodeExpiration = null;
 });
 
-// Rota para obter QR Code e status
-app.get('/whatsapp/qrcode', (req, res) => {
+// Função para gerar QR Code
+async function generateQRCode() {
+    return new Promise((resolve, reject) => {
+        // Limpa QR Code anterior se existir
+        qrCodeData = null;
+        qrCodeExpiration = null;
+
+        // Configura timeout para rejeitar se demorar muito
+        const timeout = setTimeout(() => {
+            reject(new Error('Timeout ao gerar QR Code'));
+        }, 30000); // 30 segundos
+
+        // Configura handler do evento qr
+        const qrHandler = (qr) => {
+            clearTimeout(timeout);
+            client.removeListener('qr', qrHandler);
+            
+            console.log('QR Code gerado com sucesso!');
+            qrCodeData = qr;
+            qrCodeExpiration = Date.now() + QR_CODE_EXPIRATION_TIME;
+            
+            resolve({
+                status: 'connecting',
+                qrcode: qr,
+                expiresAt: new Date(qrCodeExpiration).toISOString(),
+                lastUpdate: new Date().toISOString()
+            });
+        };
+
+        client.on('qr', qrHandler);
+
+        // Inicia o cliente se não estiver iniciado
+        if (!client.isInitialized) {
+            client.initialize().catch(error => {
+                clearTimeout(timeout);
+                client.removeListener('qr', qrHandler);
+                reject(error);
+            });
+        }
+    });
+}
+
+// Rota para obter QR Code
+app.get('/whatsapp/qrcode', authenticateToken, async (req, res) => {
     try {
-        // Se o cliente estiver conectado, retorna status connected
-        if (client.info) {
+        // Se já existe um QR Code válido, retorna ele
+        if (qrCodeData && qrCodeExpiration && Date.now() < qrCodeExpiration) {
             return res.json({
-                status: 'connected',
+                status: 'connecting',
+                qrcode: qrCodeData,
+                expiresAt: new Date(qrCodeExpiration).toISOString(),
                 lastUpdate: new Date().toISOString()
             });
         }
 
-        // Se não houver QR Code ou estiver expirado, gera um novo
-        if (!qrCodeData || !qrCodeExpiration || Date.now() > qrCodeExpiration) {
-            qrCodeData = null;
-            qrCodeExpiration = null;
-            client.initialize().catch(err => {
-                console.error('Erro ao inicializar cliente:', err);
-                return res.status(500).json({
-                    status: 'error',
-                    error: 'Erro ao gerar QR Code'
-                });
-            });
-        }
-
-        // Retorna o QR Code atual
-        res.json({
-            status: 'disconnected',
-            qrcode: qrCodeData,
-            expiresAt: new Date(qrCodeExpiration).toISOString(),
-            lastUpdate: new Date().toISOString()
-        });
+        // Se não existe QR Code válido, gera um novo
+        const qrCodeResponse = await generateQRCode();
+        res.json(qrCodeResponse);
     } catch (error) {
-        console.error('Erro ao obter QR Code:', error);
+        console.error('Erro ao gerar QR Code:', error);
         res.status(500).json({
             status: 'error',
-            error: 'Erro ao processar requisição'
+            error: 'Erro ao gerar QR Code'
         });
     }
 });
