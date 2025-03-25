@@ -1,10 +1,23 @@
 const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Configuração do CORS
+const corsOptions = {
+    origin: ['http://localhost:3000', 'http://localhost:5173'], // Adicione aqui as origens permitidas
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    optionsSuccessStatus: 204
+};
+
+// Middleware para CORS
+app.use(cors(corsOptions));
 
 // Middleware para processar JSON
 app.use(express.json());
