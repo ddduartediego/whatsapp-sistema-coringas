@@ -15,6 +15,24 @@ app.use((req, res, next) => {
     next();
 });
 
+// Middleware de autenticação
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) {
+        console.log('Tentativa de acesso sem token');
+        return res.status(401).json({ error: 'Token não fornecido' });
+    }
+
+    if (token !== process.env.WHATSAPP_API_TOKEN) {
+        console.log('Tentativa de acesso com token inválido');
+        return res.status(403).json({ error: 'Token inválido' });
+    }
+
+    next();
+};
+
 // Inicializa o cliente do WhatsApp
 const client = new Client({
     authStrategy: new LocalAuth(),
@@ -79,8 +97,8 @@ app.get('/status', (req, res) => {
     });
 });
 
-// Rota para enviar mensagem
-app.post('/send-message', async (req, res) => {
+// Rota para enviar mensagem (protegida com token)
+app.post('/send-message', authenticateToken, async (req, res) => {
     console.log('Requisição recebida na rota send-message:', req.body);
     try {
         const { number, message } = req.body;
