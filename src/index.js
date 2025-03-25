@@ -77,8 +77,7 @@ const QR_CODE_EXPIRATION_TIME = 90000; // 1.5 minutos
 
 // Gera o QR Code para autenticação
 client.on('qr', (qr) => {
-    console.log('QR Code gerado!');
-    qrcode.generate(qr, { small: true });
+    console.log('QR Code gerado com sucesso!');
     
     // Armazena o QR Code e define o tempo de expiração
     qrCodeData = qr;
