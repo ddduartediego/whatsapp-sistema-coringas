@@ -19,7 +19,16 @@ app.use((req, res, next) => {
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu'
+        ]
     }
 });
 
@@ -50,36 +59,44 @@ client.initialize().catch(err => {
 
 // Rota raiz para verificar se a API está online
 app.get('/', (req, res) => {
+    console.log('Requisição recebida na rota raiz');
     res.json({ 
         status: 'online',
         timestamp: new Date().toISOString(),
-        whatsapp: client.info ? 'connected' : 'disconnected'
+        whatsapp: client.info ? 'connected' : 'disconnected',
+        port: port
     });
 });
 
 // Rota para verificar o status da API
 app.get('/status', (req, res) => {
+    console.log('Requisição recebida na rota status');
     res.json({ 
         status: 'online',
         timestamp: new Date().toISOString(),
-        whatsapp: client.info ? 'connected' : 'disconnected'
+        whatsapp: client.info ? 'connected' : 'disconnected',
+        port: port
     });
 });
 
 // Rota para enviar mensagem
 app.post('/send-message', async (req, res) => {
+    console.log('Requisição recebida na rota send-message:', req.body);
     try {
         const { number, message } = req.body;
         
         if (!number || !message) {
+            console.log('Erro: Número ou mensagem faltando');
             return res.status(400).json({ error: 'Número e mensagem são obrigatórios' });
         }
 
         // Formata o número para o formato do WhatsApp
         const formattedNumber = number.includes('@c.us') ? number : `${number}@c.us`;
+        console.log('Número formatado:', formattedNumber);
         
         // Envia a mensagem
         await client.sendMessage(formattedNumber, message);
+        console.log('Mensagem enviada com sucesso');
         
         res.json({ success: true, message: 'Mensagem enviada com sucesso!' });
     } catch (error) {
@@ -98,7 +115,7 @@ app.use((err, req, res, next) => {
 });
 
 // Inicia o servidor
-app.listen(port, () => {
-    console.log(`Servidor rodando na porta ${port}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Servidor rodando em http://0.0.0.0:${port}`);
     console.log(`Ambiente: ${process.env.NODE_ENV || 'development'}`);
 }); 
