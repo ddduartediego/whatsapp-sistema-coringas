@@ -35,7 +35,10 @@ const authenticateToken = (req, res, next) => {
 
 // Inicializa o cliente do WhatsApp
 const client = new Client({
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth({
+        clientId: 'whatsapp-coringas-api',
+        dataPath: '/tmp/.wwebjs_auth'
+    }),
     puppeteer: {
         args: [
             '--no-sandbox',
@@ -101,6 +104,15 @@ app.get('/status', (req, res) => {
 app.post('/send-message', authenticateToken, async (req, res) => {
     console.log('Requisição recebida na rota send-message:', req.body);
     try {
+        // Verifica se o cliente está pronto
+        if (!client.info) {
+            console.log('Cliente WhatsApp não está pronto');
+            return res.status(503).json({ 
+                error: 'WhatsApp não está conectado',
+                details: 'Aguarde a conexão ser estabelecida'
+            });
+        }
+
         const { number, message } = req.body;
         
         if (!number || !message) {
@@ -119,7 +131,11 @@ app.post('/send-message', authenticateToken, async (req, res) => {
         res.json({ success: true, message: 'Mensagem enviada com sucesso!' });
     } catch (error) {
         console.error('Erro ao enviar mensagem:', error);
-        res.status(500).json({ error: 'Erro ao enviar mensagem', details: error.message });
+        res.status(500).json({ 
+            error: 'Erro ao enviar mensagem', 
+            details: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 });
 
