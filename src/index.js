@@ -9,7 +9,11 @@ const port = process.env.PORT || 3000;
 
 // Configuração do CORS
 const corsOptions = {
-    origin: ['http://localhost:3000', 'http://localhost:5173'], // Adicione aqui as origens permitidas
+    origin: [
+        'http://localhost:3000', 
+        'http://localhost:5173',
+        'https://sistemacoringas.vercel.app'
+    ],
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
@@ -66,29 +70,103 @@ const client = new Client({
     }
 });
 
+// Variáveis para controle de estado
+let qrCodeData = null;
+let qrCodeExpiration = null;
+const QR_CODE_EXPIRATION_TIME = 90000; // 1.5 minutos
+
 // Gera o QR Code para autenticação
 client.on('qr', (qr) => {
     console.log('QR Code gerado!');
     qrcode.generate(qr, { small: true });
+    
+    // Armazena o QR Code e define o tempo de expiração
+    qrCodeData = qr;
+    qrCodeExpiration = Date.now() + QR_CODE_EXPIRATION_TIME;
 });
 
 // Quando o cliente estiver pronto
 client.on('ready', () => {
     console.log('Cliente WhatsApp está pronto!');
+    qrCodeData = null;
+    qrCodeExpiration = null;
 });
 
 // Tratamento de erros do cliente
 client.on('auth_failure', (msg) => {
     console.error('Falha na autenticação:', msg);
+    qrCodeData = null;
+    qrCodeExpiration = null;
 });
 
 client.on('disconnected', (reason) => {
     console.log('Cliente desconectado:', reason);
+    qrCodeData = null;
+    qrCodeExpiration = null;
 });
 
 // Inicializa o cliente
 client.initialize().catch(err => {
     console.error('Erro ao inicializar o cliente:', err);
+    qrCodeData = null;
+    qrCodeExpiration = null;
+});
+
+// Rota para obter QR Code e status
+app.get('/whatsapp/qrcode', (req, res) => {
+    try {
+        // Se o cliente estiver conectado, retorna status connected
+        if (client.info) {
+            return res.json({
+                status: 'connected',
+                lastUpdate: new Date().toISOString()
+            });
+        }
+
+        // Se não houver QR Code ou estiver expirado, gera um novo
+        if (!qrCodeData || !qrCodeExpiration || Date.now() > qrCodeExpiration) {
+            qrCodeData = null;
+            qrCodeExpiration = null;
+            client.initialize().catch(err => {
+                console.error('Erro ao inicializar cliente:', err);
+                return res.status(500).json({
+                    status: 'error',
+                    error: 'Erro ao gerar QR Code'
+                });
+            });
+        }
+
+        // Retorna o QR Code atual
+        res.json({
+            status: 'disconnected',
+            qrcode: qrCodeData,
+            expiresAt: new Date(qrCodeExpiration).toISOString(),
+            lastUpdate: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Erro ao obter QR Code:', error);
+        res.status(500).json({
+            status: 'error',
+            error: 'Erro ao processar requisição'
+        });
+    }
+});
+
+// Rota para verificar status
+app.get('/whatsapp/status', (req, res) => {
+    try {
+        const status = client.info ? 'connected' : 'disconnected';
+        res.json({
+            status,
+            lastUpdate: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Erro ao verificar status:', error);
+        res.status(500).json({
+            status: 'error',
+            error: 'Erro ao verificar status'
+        });
+    }
 });
 
 // Rota raiz para verificar se a API está online
