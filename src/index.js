@@ -103,8 +103,11 @@ async function initializeClient() {
 // Função para gerar QR Code
 async function generateQRCode() {
     return new Promise((resolve, reject) => {
+        console.log('Iniciando geração de QR Code...');
+        
         // Configura timeout para rejeitar se demorar muito
         const timeout = setTimeout(() => {
+            console.log('Timeout ao gerar QR Code - 30 segundos se passaram');
             client.removeListener('qr', qrHandler);
             reject(new Error('Timeout ao gerar QR Code'));
         }, 30000); // 30 segundos
@@ -115,6 +118,7 @@ async function generateQRCode() {
             client.removeListener('qr', qrHandler);
             
             console.log('QR Code gerado com sucesso!');
+            console.log('Tamanho do QR Code:', qr.length, 'caracteres');
             
             resolve({
                 status: 'connecting',
@@ -128,25 +132,32 @@ async function generateQRCode() {
 
         // Se o cliente não estiver inicializado, inicializa
         if (!clientInitialized) {
+            console.log('Cliente não inicializado, inicializando...');
             initializeClient().catch(error => {
+                console.error('Erro ao inicializar cliente:', error);
                 clearTimeout(timeout);
                 client.removeListener('qr', qrHandler);
                 reject(error);
             });
         } else if (client.info) {
             // Se já estiver conectado, rejeita
+            console.log('Cliente já está conectado, rejeitando geração de QR Code');
             clearTimeout(timeout);
             client.removeListener('qr', qrHandler);
             reject(new Error('WhatsApp já está conectado'));
+        } else {
+            console.log('Cliente já inicializado, aguardando evento QR...');
         }
     });
 }
 
-// Rota para obter QR Code
-app.get('/whatsapp/qrcode', authenticateToken, async (req, res) => {
+// Rota para obter QR Code (GET e POST)
+async function handleQRCodeRequest(req, res) {
+    console.log(`Recebida requisição ${req.method} para gerar QR Code`);
     try {
         // Se o WhatsApp já estiver conectado, retorna erro
         if (client.info) {
+            console.log('WhatsApp já está conectado, retornando erro');
             return res.status(400).json({
                 status: 'error',
                 error: 'WhatsApp já está conectado'
@@ -154,7 +165,9 @@ app.get('/whatsapp/qrcode', authenticateToken, async (req, res) => {
         }
 
         // Gera um novo QR Code
+        console.log('Iniciando geração de novo QR Code');
         const qrCodeResponse = await generateQRCode();
+        console.log('QR Code gerado e retornando resposta');
         res.json(qrCodeResponse);
     } catch (error) {
         console.error('Erro ao gerar QR Code:', error);
@@ -163,7 +176,11 @@ app.get('/whatsapp/qrcode', authenticateToken, async (req, res) => {
             error: error.message || 'Erro ao gerar QR Code'
         });
     }
-});
+}
+
+// Registra as rotas GET e POST para QR Code
+app.get('/whatsapp/qrcode', authenticateToken, handleQRCodeRequest);
+app.post('/whatsapp/qrcode', authenticateToken, handleQRCodeRequest);
 
 // Rota para verificar status
 app.get('/whatsapp/status', (req, res) => {
