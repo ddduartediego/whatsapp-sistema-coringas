@@ -71,55 +71,41 @@ const client = new Client({
 });
 
 // Variáveis para controle de estado
-let qrCodeData = null;
-let qrCodeExpiration = null;
-const QR_CODE_EXPIRATION_TIME = 90000; // 1.5 minutos
-
-// Gera o QR Code para autenticação
-client.on('qr', (qr) => {
-    console.log('QR Code gerado com sucesso!');
-    
-    // Armazena o QR Code e define o tempo de expiração
-    qrCodeData = qr;
-    qrCodeExpiration = Date.now() + QR_CODE_EXPIRATION_TIME;
-});
+let clientInitialized = false;
 
 // Quando o cliente estiver pronto
 client.on('ready', () => {
     console.log('Cliente WhatsApp está pronto!');
-    qrCodeData = null;
-    qrCodeExpiration = null;
 });
 
 // Tratamento de erros do cliente
 client.on('auth_failure', (msg) => {
     console.error('Falha na autenticação:', msg);
-    qrCodeData = null;
-    qrCodeExpiration = null;
 });
 
 client.on('disconnected', (reason) => {
     console.log('Cliente desconectado:', reason);
-    qrCodeData = null;
-    qrCodeExpiration = null;
 });
 
-// Inicializa o cliente
-client.initialize().catch(err => {
-    console.error('Erro ao inicializar o cliente:', err);
-    qrCodeData = null;
-    qrCodeExpiration = null;
-});
+// Inicializa o cliente sem gerar QR Code
+async function initializeClient() {
+    if (!clientInitialized) {
+        try {
+            await client.initialize();
+            clientInitialized = true;
+        } catch (err) {
+            console.error('Erro ao inicializar o cliente:', err);
+            throw err;
+        }
+    }
+}
 
 // Função para gerar QR Code
 async function generateQRCode() {
     return new Promise((resolve, reject) => {
-        // Limpa QR Code anterior se existir
-        qrCodeData = null;
-        qrCodeExpiration = null;
-
         // Configura timeout para rejeitar se demorar muito
         const timeout = setTimeout(() => {
+            client.removeListener('qr', qrHandler);
             reject(new Error('Timeout ao gerar QR Code'));
         }, 30000); // 30 segundos
 
@@ -129,26 +115,29 @@ async function generateQRCode() {
             client.removeListener('qr', qrHandler);
             
             console.log('QR Code gerado com sucesso!');
-            qrCodeData = qr;
-            qrCodeExpiration = Date.now() + QR_CODE_EXPIRATION_TIME;
             
             resolve({
                 status: 'connecting',
                 qrcode: qr,
-                expiresAt: new Date(qrCodeExpiration).toISOString(),
                 lastUpdate: new Date().toISOString()
             });
         };
 
+        // Adiciona o handler para o evento qr
         client.on('qr', qrHandler);
 
-        // Inicia o cliente se não estiver iniciado
-        if (!client.isInitialized) {
-            client.initialize().catch(error => {
+        // Se o cliente não estiver inicializado, inicializa
+        if (!clientInitialized) {
+            initializeClient().catch(error => {
                 clearTimeout(timeout);
                 client.removeListener('qr', qrHandler);
                 reject(error);
             });
+        } else if (client.info) {
+            // Se já estiver conectado, rejeita
+            clearTimeout(timeout);
+            client.removeListener('qr', qrHandler);
+            reject(new Error('WhatsApp já está conectado'));
         }
     });
 }
@@ -156,24 +145,22 @@ async function generateQRCode() {
 // Rota para obter QR Code
 app.get('/whatsapp/qrcode', authenticateToken, async (req, res) => {
     try {
-        // Se já existe um QR Code válido, retorna ele
-        if (qrCodeData && qrCodeExpiration && Date.now() < qrCodeExpiration) {
-            return res.json({
-                status: 'connecting',
-                qrcode: qrCodeData,
-                expiresAt: new Date(qrCodeExpiration).toISOString(),
-                lastUpdate: new Date().toISOString()
+        // Se o WhatsApp já estiver conectado, retorna erro
+        if (client.info) {
+            return res.status(400).json({
+                status: 'error',
+                error: 'WhatsApp já está conectado'
             });
         }
 
-        // Se não existe QR Code válido, gera um novo
+        // Gera um novo QR Code
         const qrCodeResponse = await generateQRCode();
         res.json(qrCodeResponse);
     } catch (error) {
         console.error('Erro ao gerar QR Code:', error);
         res.status(500).json({
             status: 'error',
-            error: 'Erro ao gerar QR Code'
+            error: error.message || 'Erro ao gerar QR Code'
         });
     }
 });
@@ -269,10 +256,6 @@ app.post('/whatsapp/disconnect', authenticateToken, async (req, res) => {
         // Desconecta o cliente
         await client.destroy();
         
-        // Limpa os dados do QR Code
-        qrCodeData = null;
-        qrCodeExpiration = null;
-
         res.json({
             status: 'success',
             message: 'WhatsApp desconectado com sucesso'
